@@ -1,42 +1,65 @@
-var express=require("express")
-var cors=require("cors")
-var bodyParser=require("body-parser")
-var mongodB=require("mongoose")
-var jwt=require("jwt-simple")
-var Post=require("./models/Post")
-var User=require("./models/User")
-var auth=require("./auth")
+var express = require('express')
+var cors = require('cors')
+var bodyParser = require('body-parser')
+var mongoose = require('mongoose')
+var app = express()
+var jwt = require('jwt-simple')
 
+var User = require('./models/User.js')
+var Post = require('./models/Post.js')
+var auth = require('./auth.js')
 
-//bu file dosyasında  middleware yapılanmasını kurguluyoruz;
+mongoose.Promise = Promise
 
-var app=express()
-
-app.use(cors());
+app.use(cors())
 app.use(bodyParser.json())
 
-mongodB.connect("mongodb://Admin:admin12345@ds111299.mlab.com:11299/socialdb",(err)=>{
-    if(!err){
-        console.log("connected to mongo");
+app.get('/posts/:id', async (req, res) => {
+    var author = req.params.id
+    var posts = await Post.find({ author })
+    res.send(posts)
+})
+
+app.post('/post', auth.checkAuthenticated, (req, res) => {
+    var postData = req.body
+    postData.author = req.userId
+
+    var post = new Post(postData)
+
+    post.save((err, result) => {
+        if (err) {
+            console.error('saving post error')
+            return res.status(500).send({ message: 'saving post error' })
+        }
+
+        res.sendStatus(200)
+    })
+})
+
+app.get('/users', async (req, res) => {
+    try {
+        var users = await User.find({}, '-pwd -__v')
+        res.send(users)
+    } catch (error) {
+        console.error(error)
+        res.sendStatus(500)
     }
 })
 
-app.post("/post",(req,res)=>{
-    var postData=req.body;
+app.get('/profile/:id', async (req, res) => {
+    try {
+        var user = await User.findById(req.params.id, '-pwd -__v')
+        res.send(user)
+    } catch (error) {
+        console.error(error)
+        res.sendStatus(500)
+    }
+})
 
-    var post=new Post(postData);
+mongoose.connect('mongodb://Admin:admin12345@ds111299.mlab.com:11299/socialdb', (err) => {
+    if (!err)
+        console.log('connected to mongo')
+})
 
-    post.save((error,response)=>{
-        if(error){
-            console.error(error);
-            return res.status(500).send({message:'Post save exception'});
-        }
-        if(response){
-            return res.status(200).send({message:'Success'});
-        }
-
-    });
-
-});
-app.use("/auth",auth);
-app.listen(3000);
+app.use('/auth', auth.router)
+app.listen(process.env.PORT || 3000)
